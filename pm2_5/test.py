@@ -319,8 +319,7 @@ try:
 except Exception as e:
     print(f"An error occurred: {str(e)}")
 
-# ส่วนที่ 13: การใช้งาน pycaret เพื่อสร้างโมเดลทำนายอุณหภูมิ
-
+# ส่วนที่ 13: การใช้งาน pycaret เพื่อสร้างโมเดลทำนาย PM2.5
 # ตรวจสอบข้อมูลที่เตรียมไว้
 print("Train data shape:", train_data.shape)
 print("Columns in train_data:", train_data.columns.tolist())
@@ -339,80 +338,46 @@ train_data.fillna(train_data.median(), inplace=True)
 numeric_cols = train_data.select_dtypes(include=["number"]).columns
 train_data[numeric_cols] = train_data[numeric_cols].astype(float)
 
-# เพิ่ม noise ในข้อมูล
-noise = np.random.normal(0, 1, train_data[numeric_cols].shape)  # ลด noise
-train_data[numeric_cols] += noise
-
 # ตรวจสอบว่าข้อมูลถูกต้องหรือไม่
 print("Data types after conversion:", train_data.dtypes)
 print("Sample of prepared data:")
 print(train_data.head())
 
-# ตั้งค่า PyCaret แบบค่อยเป็นค่อยไป
+# ตั้งค่า PyCaret
 from pycaret.regression import *
 
 try:
+    # ตั้งค่า experiment
     exp_pm25 = setup(
         data=train_data,
         target="pm_2_5",
         session_id=123,
-        fold=10,  # เพิ่มจำนวน fold
-        feature_selection=True,  # เปิดการเลือกฟีเจอร์
-        remove_multicollinearity=True,  # เปิดการตรวจสอบ multicollinearity
-        verbose=True,  # แสดงรายละเอียดมากขึ้น
-        polynomial_features=False,  # ปิดการสร้างฟีเจอร์ polynomial
-        interaction_features=False,  # ปิดการสร้างฟีเจอร์ interaction
-        bin_numeric_features=None,  # ไม่ใช้การ binning
-        remove_outliers=True,  # เปิดการลบ outliers
+        fold=10,
+        remove_multicollinearity=True,
+        verbose=True,
+        remove_outliers=True,
+        normalize=True,  # เพิ่มการ normalize ข้อมูล
     )
 
-    # สร้างโมเดล Linear Regression แทน Random Forest
-    best_pm25_model = create_model("lr", verbose=True)
+    # สร้างโมเดล ElasticNet แทน Linear Regression
+    elasticnet_model = create_model("en", verbose=True)
 
-    # ปรับแต่งโมเดลด้วยพารามิเตอร์น้อยลง
-    tuned_pm25_model = tune_model(best_pm25_model, optimize="RMSE", n_iter=50)
+    # ปรับแต่งโมเดล
+    tuned_elasticnet_model = tune_model(elasticnet_model, optimize="RMSE", n_iter=50)
 
-    # โมเดลที่ดีที่สุด
-    final_pm25_model = finalize_model(tuned_pm25_model)
+    # สร้างโมเดลสุดท้าย
+    final_elasticnet_model = finalize_model(tuned_elasticnet_model)
+
+    # สร้างกราฟ Prediction Error
+    plot_model(final_elasticnet_model, plot="error", save=True)
 
     # บันทึกโมเดล
-    save_model(final_pm25_model, "pm25_prediction_model_optimized")
+    save_model(final_elasticnet_model, "pm25_prediction_model_elasticnet")
 
-    print("Model training completed successfully!")
+    print("ElasticNet model training completed successfully!")
 
 except Exception as e:
     print(f"An error occurred: {str(e)}")
-
-    # ลองใช้วิธีที่ง่ายกว่า - ใช้เฉพาะฟีเจอร์พื้นฐาน
-    print("Trying with basic features only...")
-    basic_features = ["humidity", "pm_10"]
-    basic_train_data = train_data[basic_features + ["pm_2_5"]].copy()
-
-    print("Basic train data columns:", basic_train_data.columns.tolist())
-    print("Basic train data sample:")
-    print(basic_train_data.head())
-
-    # ใช้ setup อีกครั้งกับข้อมูลพื้นฐาน
-    exp_pm25 = setup(
-        data=basic_train_data,
-        target="pm_2_5",
-        session_id=123,
-        fold=10,
-        normalize=True,
-        verbose=True,
-    )
-
-    # สร้างโมเดล Linear Regression แทน Random Forest
-    best_pm25_model = create_model("lr", verbose=True)
-
-    # ปรับแต่งโมเดลด้วยพารามิเตอร์น้อยลง
-    tuned_pm25_model = tune_model(best_pm25_model, optimize="RMSE", n_iter=50)
-
-    # บันทึกโมเดลพื้นฐาน
-    final_pm25_model = finalize_model(tuned_pm25_model)
-    save_model(final_pm25_model, "pm25_prediction_model_basic")
-
-    print("Basic model training completed successfully!")
 
 # ส่วนที่ 14: การใช้งาน pycaret เพื่อสร้างโมเดลทำนายอุณหภูมิ
 
@@ -454,14 +419,13 @@ try:
         verbose=True,  # แสดงรายละเอียดมากขึ้น
     )
 
-    # สร้างโมเดลแบบ verbose
-    best_temp_model = create_model("en", verbose=True)  # Elastic Net
+    # ลองใช้โมเดลหลายๆ แบบ
+    print("Comparing different models for temperature prediction...")
+    top_models = compare_models(n_select=3)
 
-    # ประเมินผลโมเดลพื้นฐาน
-    evaluate_model(best_temp_model)
-
-    # ปรับแต่งโมเดลด้วยพารามิเตอร์น้อยลง
-    tuned_temp_model = tune_model(best_temp_model, optimize="RMSE", n_iter=5)
+    # ปรับแต่งโมเดลที่ดีที่สุด
+    best_temp_model = top_models[0]
+    tuned_temp_model = tune_model(best_temp_model, optimize="R2", n_iter=100)
 
     # โมเดลที่ดีที่สุด
     final_temp_model = finalize_model(tuned_temp_model)
@@ -503,11 +467,11 @@ except Exception as e:
     # ลองใช้ Random Forest แทน
     best_temp_model = create_model("rf", verbose=True)
 
-    # ประเมินผลโมเดลพื้นฐาน
-    evaluate_model(best_temp_model)
+    # ปรับแต่งโมเดลด้วยพารามิเตอร์น้อยลง
+    tuned_temp_model = tune_model(best_temp_model, optimize="R2", n_iter=100)
 
     # บันทึกโมเดลพื้นฐาน
-    final_temp_model = finalize_model(best_temp_model)
+    final_temp_model = finalize_model(tuned_temp_model)
     save_model(final_temp_model, "temperature_prediction_model_basic")
 
     print("Basic temperature model training completed successfully!")
@@ -531,6 +495,7 @@ except Exception as e:
     except Exception as e:
         print(f"Error during model comparison: {str(e)}")
         print("Continuing with the basic model...")
+
 # ส่วนที่ 15: บันทึกข้อมูลที่ทำความสะอาดแล้ว
 import os
 
